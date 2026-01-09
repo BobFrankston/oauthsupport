@@ -364,36 +364,71 @@ export class OAuthGetToken {
                 
                 if (query.code) {
                     const authCode = query.code as string;
-                    
-                    // Send success response to browser
-                    const responseString = `
+
+                    // Send success response to browser with aggressive auto-close
+                    const responseString = `<!DOCTYPE html>
 <html>
-<head><title>Authorization Successful</title></head>
+<head>
+<title>Authorization Successful</title>
+<style>
+  body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  .card { background: white; padding: 2rem 3rem; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); text-align: center; }
+  h1 { color: #22c55e; margin: 0 0 0.5rem 0; }
+  p { color: #666; margin: 0.5rem 0; }
+  .countdown { font-size: 0.9rem; color: #999; }
+</style>
+</head>
 <body>
-<h1>Authorization Successful!</h1>
-<p>You can close this browser window and return to the console.</p>
-<script>setTimeout(function(){window.close();}, 3000);</script>
+<div class="card">
+  <h1>&#10003; Authorization Successful</h1>
+  <p>You can close this window now.</p>
+  <p class="countdown">Closing in <span id="t">3</span>s...</p>
+</div>
+<script>
+(function(){
+  var t=3, el=document.getElementById('t');
+  setInterval(function(){ if(--t>=0) el.textContent=t; }, 1000);
+  setTimeout(function(){
+    window.close();
+    // If close fails, try other methods
+    window.open('', '_self').close();
+    // Last resort: blank the page
+    setTimeout(function(){ document.body.innerHTML='<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#666">Window closed. You may close this tab.</div>'; }, 500);
+  }, 3000);
+})();
+</script>
 </body>
 </html>`;
-                    
+
                     res.writeHead(200, { 'Content-Type': 'text/html' });
                     res.end(responseString);
-                    
+
                     console.log('Authorization code received successfully!');
                     clearTimeout(timeout);
                     resolve(authCode);
                 } else if (query.error) {
                     const error = query.error as string;
                     console.error(`OAuth error: ${error}`);
-                    
+
                     // Send error response to browser
-                    const responseString = `
+                    const responseString = `<!DOCTYPE html>
 <html>
-<head><title>Authorization Failed</title></head>
+<head>
+<title>Authorization Failed</title>
+<style>
+  body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+  .card { background: white; padding: 2rem 3rem; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); text-align: center; }
+  h1 { color: #ef4444; margin: 0 0 0.5rem 0; }
+  p { color: #666; margin: 0.5rem 0; }
+  .error { font-family: monospace; background: #fee; padding: 0.5rem 1rem; border-radius: 4px; color: #c00; }
+</style>
+</head>
 <body>
-<h1>Authorization Failed</h1>
-<p>Error: ${error}</p>
-<p>You can close this browser window.</p>
+<div class="card">
+  <h1>&#10007; Authorization Failed</h1>
+  <p class="error">${error}</p>
+  <p>You can close this window.</p>
+</div>
 </body>
 </html>`;
                     
