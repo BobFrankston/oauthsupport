@@ -1,0 +1,38 @@
+# Credentials and tokens - NEVER publish these!
+credentials.json
+*credentials*.json
+token.json
+*token*.json
+google-contacts-token.json
+
+# Source files (publish compiled output only)
+*.ts
+!*.d.ts
+tsconfig.json
+
+# Development files
+.vscode/
+.gitignore
+*.test.*
+test/
+examples/
+lifetime-examples.ts
+runner.ts
+OAuthTokenManager.example.ts
+
+# Documentation (keep README files)
+# README-*.md
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+*.map
+
+# Misc
+.env
+.env.local
+*.log

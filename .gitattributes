@@ -1,0 +1,12 @@
+# Force LF line endings for all text files
+* text=auto eol=lf
+
+# Explicitly declare text files
+*.ts text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+
+# Windows-specific files (if any)
+*.bat text eol=crlf
+*.cmd text eol=crlf

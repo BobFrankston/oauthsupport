@@ -1,0 +1,49 @@
+{
+  "name": "@bobfrankston/oauthsupport",
+  "version": "1.0.0",
+  "description": "Universal OAuth token manager supporting any OAuth provider with automatic token refresh and caching",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "module",
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "README*.md",
+    "!*.test.js",
+    "!lifetime-examples.js",
+    "!runner.js",
+    "!OAuthTokenManager.example.js"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "tsc",
+    "prerelease:local": "git add -A && (git diff-index --quiet HEAD || git commit -m \"Pre-release commit\")",
+    "preversion": "npm run check && npm run build && git add -A",
+    "postversion": "git push && git push --tags",
+    "release": "npm whoami && npm run prerelease:local && npm version patch && npm publish --access public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bobfrankston/oauthsupport.git"
+  },
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "authentication",
+    "token",
+    "google",
+    "github",
+    "microsoft",
+    "refresh-token",
+    "authorization"
+  ],
+  "author": "Bob Frankston",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,42 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "esnext",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "outDir": "./",
+        "rootDir": "./",
+        "removeComments": true,
+        "newLine": "lf",
+        
+        /* Strict Type-Checking Options */
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": false,
+        
+        /* Additional Checks */
+        "noFallthroughCasesInSwitch": true,
+        
+        /* Module Resolution Options */
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        
+        /* Advanced Options */
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        
+        /* For publishing - compile to JS */
+        "noEmit": false
+    },
+    "include": [
+        "index.ts",
+        "OAuthTokenManager.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "*.example.ts",
+        "lifetime-examples.ts",
+        "runner.ts"
+    ]
+}
