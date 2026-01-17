@@ -1,6 +1,6 @@
 {
   "name": "@bobfrankston/oauthsupport",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Universal OAuth token manager supporting any OAuth provider with automatic token refresh and caching",
   "main": "index.js",
   "types": "index.d.ts",
