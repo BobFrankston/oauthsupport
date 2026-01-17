@@ -4,12 +4,10 @@ credentials.json
 token.json
 *token*.json
 google-contacts-token.json
-
 # Source files (publish compiled output only)
 *.ts
 !*.d.ts
 tsconfig.json
-
 # Development files
 .vscode/
 .gitignore
@@ -19,20 +17,31 @@ examples/
 lifetime-examples.ts
 runner.ts
 OAuthTokenManager.example.ts
-
 # Documentation (keep README files)
 # README-*.md
-
 # Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
 # Build artifacts
 *.map
-
 # Misc
 .env
 .env.local
 *.log
+.git/
+.gitattributes
+certs/
+*cert*/
+.env*
+token*
+cruft/
+prev/
+tests/
+*.md
+!README.md
+.DS_Store
+Thumbs.db
+package-lock.json
+.globalize.json5

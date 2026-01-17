@@ -27,7 +27,8 @@
         "forceConsistentCasingInFileNames": true,
         
         /* For publishing - compile to JS */
-        "noEmit": false
+        "noEmit": false,
+
     },
     "include": [
         "index.ts",

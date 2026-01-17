@@ -1,39 +1,36 @@
-# Credentials and tokens - NEVER commit these!
-credentials.json
-*credentials*.json
-token.json
-*token*.json
-google-contacts-token.json
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Build outputs
+*.d.ts
 *.js
 *.js.map
-*.d.ts
-dist/
-build/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Test files
-*.test.js
-test/
-
-# Misc
+*.key
 *.log
+*.p12
+*.pem
+*.pfx
+*.swo
+*.swp
+*.test.js
+*.token
+*cert*/
+*credentials*.json
+*token*.json
+*~
+.DS_Store
 .env
+.env*
 .env.local
+.globalize.json5
+.idea/
+.vscode/
+Thumbs.db
+build/
+credentials.json
+dist/
+google-contacts-token.json
+node_modules/
+npm-debug.log*
+test/
+token
+token.json
+tokens
+yarn-debug.log*
+yarn-error.log*
