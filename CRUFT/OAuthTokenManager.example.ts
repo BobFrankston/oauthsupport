@@ -3,7 +3,7 @@
  * This demonstrates how the token manager can be used for any OAuth provider
  */
 
-import OAuthTokenManager, { OAuthClient, OAuthToken } from './OAuthTokenManager.ts';
+import OAuthTokenManager, { OAuthClient, OAuthToken } from '../OAuthTokenManager.ts';
 
 // Example: Using with Google OAuth
 const googleClient: OAuthClient = {

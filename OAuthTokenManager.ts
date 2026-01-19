@@ -282,8 +282,8 @@ export class OAuthGetToken {
 
     constructor(credentials: OAuthCredentials) {
         this.credentials = credentials;
-        this.successHtmlPath = path.join(__dirname, 'oauth-success.html');
-        this.errorHtmlPath = path.join(__dirname, 'oauth-error.html');
+        this.successHtmlPath = path.join(import.meta.dirname, 'oauth-success.html');
+        this.errorHtmlPath = path.join(import.meta.dirname, 'oauth-error.html');
     }
 
     /**
