@@ -398,7 +398,7 @@ export class OAuthGetToken {
     /**
      * Open browser to authorization URL
      */
-    private async openBrowser(url: string): Promise<void> {
+    private async openBrowser(url: string): Promise<boolean> {
         try {
             let command: string;
             if (process.platform === 'win32') {
@@ -408,11 +408,12 @@ export class OAuthGetToken {
             } else {
                 command = `xdg-open "${url}"`;
             }
-            
+
             await execAsync(command);
             console.log('Browser opened for authorization');
+            return true;
         } catch (error) {
-            console.log('Could not automatically open browser. Please manually visit the URL above.');
+            return false;
         }
     }
 
@@ -453,7 +454,15 @@ export class OAuthGetToken {
             console.log(`Authorization URL: ${authUrl}`);
             
             // Try to open browser automatically
-            await this.openBrowser(authUrl);
+            const browserOpened = await this.openBrowser(authUrl);
+            if (!browserOpened) {
+                console.log('\nNo browser available. To authorize on another machine:');
+                console.log('  1. Open the Authorization URL above in any browser');
+                console.log('  2. Complete the consent flow');
+                console.log(`  3. The browser will redirect to ${redirectUri} which will fail`);
+                console.log('     Copy the "code" parameter from the URL and paste it here,');
+                console.log('     or authorize on a machine with a browser and copy the token files.\n');
+            }
             
             // Wait for OAuth callback
             authCode = await this.waitForOAuthCallback(server, options.timeoutSeconds || 300, options.signal);
