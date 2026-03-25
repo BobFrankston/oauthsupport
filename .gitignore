@@ -15,6 +15,7 @@
 *token*.json
 *~
 .DS_Store
+.claude/
 .env
 .env*
 .env.local

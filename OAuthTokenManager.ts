@@ -463,6 +463,7 @@ export class OAuthGetToken {
             return null;
         } finally {
             if (server!) {
+                server.closeAllConnections();
                 server.close();
                 console.log('OAuth server stopped');
             }
