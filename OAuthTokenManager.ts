@@ -372,11 +372,11 @@ export class OAuthGetToken {
                     // Send success response to browser with aggressive auto-close
                     const responseString = fs.readFileSync(this.successHtmlPath, 'utf8');
 
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(responseString);
-
-                    clearTimeout(timeout);
-                    resolve(authCode);
+                    res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
+                    res.end(responseString, () => {
+                        clearTimeout(timeout);
+                        resolve(authCode);
+                    });
                 } else if (query.error) {
                     const error = query.error as string;
                     console.error(`OAuth error: ${error}`);
@@ -385,11 +385,11 @@ export class OAuthGetToken {
                     const responseString = fs.readFileSync(this.errorHtmlPath, 'utf8')
                         .replace('{{ERROR}}', error);
                     
-                    res.writeHead(400, { 'Content-Type': 'text/html' });
-                    res.end(responseString);
-                    
-                    clearTimeout(timeout);
-                    resolve(null);
+                    res.writeHead(400, { 'Content-Type': 'text/html', 'Connection': 'close' });
+                    res.end(responseString, () => {
+                        clearTimeout(timeout);
+                        resolve(null);
+                    });
                 }
             });
         });
@@ -463,7 +463,6 @@ export class OAuthGetToken {
             return null;
         } finally {
             if (server!) {
-                server.closeAllConnections();
                 server.close();
                 console.log('OAuth server stopped');
             }
