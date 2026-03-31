@@ -9,6 +9,7 @@ import * as querystring from 'querystring';
 import * as http from 'http';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as readline from 'readline';
 
 const execAsync = promisify(exec);
 
@@ -339,33 +340,62 @@ export class OAuthGetToken {
     /**
      * Wait for OAuth callback - Uses modern WHATWG URL API
      */
-    private waitForOAuthCallback(server: http.Server, timeoutSeconds: number = 300, signal?: AbortSignal): Promise<string | null> {
+    private waitForOAuthCallback(server: http.Server, timeoutSeconds: number = 300, signal?: AbortSignal, acceptStdin = false): Promise<string | null> {
         return new Promise((resolve) => {
             console.log(`Waiting for OAuth callback (timeout: ${timeoutSeconds} seconds)...`);
-            
+            let resolved = false;
+
+            const done = (code: string | null): void => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timeout);
+                rl?.close();
+                resolve(code);
+            };
+
             const timeout = setTimeout(() => {
                 console.error('Timeout waiting for OAuth callback');
-                resolve(null);
+                done(null);
             }, timeoutSeconds * 1000);
 
             // Handle abort signal
             if (signal) {
                 signal.addEventListener('abort', () => {
                     console.log('OAuth callback cancelled by user');
-                    clearTimeout(timeout);
-                    resolve(null);
+                    done(null);
+                });
+            }
+
+            // Accept auth code pasted to stdin (for headless systems)
+            let rl: readline.Interface | null = null;
+            if (acceptStdin && process.stdin.isTTY) {
+                rl = readline.createInterface({ input: process.stdin });
+                console.log('Or paste the authorization code here:');
+                rl.on('line', (line: string) => {
+                    const input = line.trim();
+                    if (!input) return;
+                    // Input could be the full redirect URL or just the code
+                    let code = input;
+                    try {
+                        const url = new URL(input);
+                        code = url.searchParams.get('code') || input;
+                    } catch {
+                        // Not a URL — treat as raw code
+                    }
+                    console.log('Authorization code received from stdin');
+                    done(code);
                 });
             }
 
             server.on('request', (req, res) => {
                 if (!req.url) return;
-                
+
                 // Use modern WHATWG URL API instead of deprecated url.parse()
                 const address = server.address();
                 const port = typeof address === 'object' && address ? address.port : 3000;
                 const parsedUrl = new URL(req.url, `http://localhost:${port}`);
                 const query = Object.fromEntries(parsedUrl.searchParams.entries());
-                
+
                 if (query.code) {
                     const authCode = query.code as string;
 
@@ -374,8 +404,7 @@ export class OAuthGetToken {
 
                     res.writeHead(200, { 'Content-Type': 'text/html', 'Connection': 'close' });
                     res.end(responseString, () => {
-                        clearTimeout(timeout);
-                        resolve(authCode);
+                        done(authCode);
                     });
                 } else if (query.error) {
                     const error = query.error as string;
@@ -384,11 +413,10 @@ export class OAuthGetToken {
                     // Send error response to browser
                     const responseString = fs.readFileSync(this.errorHtmlPath, 'utf8')
                         .replace('{{ERROR}}', error);
-                    
+
                     res.writeHead(400, { 'Content-Type': 'text/html', 'Connection': 'close' });
                     res.end(responseString, () => {
-                        clearTimeout(timeout);
-                        resolve(null);
+                        done(null);
                     });
                 }
             });
@@ -456,16 +484,14 @@ export class OAuthGetToken {
             // Try to open browser automatically
             const browserOpened = await this.openBrowser(authUrl);
             if (!browserOpened) {
-                console.log('\nNo browser available. To authorize on another machine:');
+                console.log('\nNo browser available. To authorize:');
                 console.log('  1. Open the Authorization URL above in any browser');
                 console.log('  2. Complete the consent flow');
-                console.log(`  3. The browser will redirect to ${redirectUri} which will fail`);
-                console.log('     Copy the "code" parameter from the URL and paste it here,');
-                console.log('     or authorize on a machine with a browser and copy the token files.\n');
+                console.log('  3. Paste the redirect URL or authorization code below\n');
             }
-            
-            // Wait for OAuth callback
-            authCode = await this.waitForOAuthCallback(server, options.timeoutSeconds || 300, options.signal);
+
+            // Wait for OAuth callback (accept stdin paste when no browser)
+            authCode = await this.waitForOAuthCallback(server, options.timeoutSeconds || 300, options.signal, !browserOpened);
             
         } catch (error) {
             console.error(`Failed to start local OAuth server: ${error}`);
