@@ -44,18 +44,24 @@
 <body>
     <div class="card">
         <h1>&#10003; Authorization Successful</h1>
-        <p>You can close this window now.</p>
-        <p class="countdown" id="countdown">Closing automatically...</p>
+        <p id="countdown">Closing in 3...</p>
     </div>
     <script>
         (function () {
-            setTimeout(function () {
+            var el = document.getElementById('countdown');
+            var t = 3;
+            var interval = setInterval(function () {
+                t--;
+                if (t > 0) { el.textContent = 'Closing in ' + t + '...'; return; }
+                clearInterval(interval);
+                // Try every known close method
                 window.close();
-                window.open('', '_self').close();
-                // Browser blocked close — update the message
+                try { window.open('', '_self').close(); } catch (e) { }
+                // Last resort: navigate away so the tab is blank
                 setTimeout(function () {
-                    document.getElementById('countdown').textContent = 'Done — you can close this tab.';
-                }, 300);
+                    try { location.replace('about:blank'); } catch (e) { }
+                    el.textContent = 'Done \u2014 you can close this tab.';
+                }, 500);
             }, 1000);
         })();
     </script>
