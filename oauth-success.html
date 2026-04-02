@@ -45,19 +45,18 @@
     <div class="card">
         <h1>&#10003; Authorization Successful</h1>
         <p>You can close this window now.</p>
-        <p class="countdown">Closing in <span id="t">3</span>s...</p>
+        <p class="countdown" id="countdown">Closing automatically...</p>
     </div>
     <script>
         (function () {
-            var t = 3, el = document.getElementById('t');
-            setInterval(function () { if (--t >= 0) el.textContent = t; }, 1000);
             setTimeout(function () {
                 window.close();
-                // If close fails, try other methods
                 window.open('', '_self').close();
-                // Last resort: blank the page
-                setTimeout(function () { document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;color:#666">Window closed. You may close this tab.</div>'; }, 500);
-            }, 3000);
+                // Browser blocked close — update the message
+                setTimeout(function () {
+                    document.getElementById('countdown').textContent = 'Done — you can close this tab.';
+                }, 300);
+            }, 1000);
         })();
     </script>
 </body>
