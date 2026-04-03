@@ -33,37 +33,17 @@
             color: #666;
             margin: 0.5rem 0;
         }
-
-        .countdown {
-            font-size: 0.9rem;
-            color: #999;
-        }
     </style>
 </head>
 
 <body>
     <div class="card">
         <h1>&#10003; Authorization Successful</h1>
-        <p id="countdown">Closing in 3...</p>
+        <p>You can close this tab.</p>
     </div>
     <script>
-        (function () {
-            var el = document.getElementById('countdown');
-            var t = 3;
-            var interval = setInterval(function () {
-                t--;
-                if (t > 0) { el.textContent = 'Closing in ' + t + '...'; return; }
-                clearInterval(interval);
-                // Try every known close method
-                window.close();
-                try { window.open('', '_self').close(); } catch (e) { }
-                // Last resort: navigate away so the tab is blank
-                setTimeout(function () {
-                    try { location.replace('about:blank'); } catch (e) { }
-                    el.textContent = 'Done \u2014 you can close this tab.';
-                }, 500);
-            }, 1000);
-        })();
+        // Try to close — works if tab was opened by JavaScript
+        setTimeout(function () { window.close(); }, 1000);
     </script>
 </body>
 
