@@ -13,6 +13,9 @@ import * as readline from 'readline';
 
 const execAsync = promisify(exec);
 
+/** Global serialization for OAuth flows — only one interactive consent at a time across all callers */
+const pendingOAuth = new Map<string, Promise<OAuthToken | null>>();
+
 export interface OAuthToken {
     access_token: string;
     refresh_token?: string;
@@ -563,6 +566,38 @@ export async function authenticateOAuth(
         loginHint?: string;  /** Pre-select this email in account picker */
         prompt?: 'none' | 'consent' | 'select_account';  /** Force specific prompt; auto-detects 'consent' when refresh token needed */
         signal?: AbortSignal;  /** Allow cancellation of OAuth flow */
+    }
+): Promise<OAuthToken | null> {
+    // Serialize by tokenDirectory — only one OAuth flow at a time per token location
+    const lockKey = options.tokenDirectory || "default";
+    const pending = pendingOAuth.get(lockKey);
+    if (pending) {
+        console.log(`  [oauth] Waiting for existing auth flow (${lockKey})`);
+        return pending;
+    }
+
+    const result = _authenticateOAuth(credentialsPathOrData, options);
+    pendingOAuth.set(lockKey, result);
+    try {
+        return await result;
+    } finally {
+        pendingOAuth.delete(lockKey);
+    }
+}
+
+async function _authenticateOAuth(
+    credentialsPathOrData: string | OAuthCredentials | object,
+    options: {
+        scope: string;
+        tokenDirectory?: string;
+        tokenFileName?: string;
+        credentialsKey?: string;
+        timeoutSeconds?: number;
+        includeOfflineAccess?: boolean;
+        maxTokenLifetimeHours?: number;
+        loginHint?: string;
+        prompt?: 'none' | 'consent' | 'select_account';
+        signal?: AbortSignal;
     }
 ): Promise<OAuthToken | null> {
     let credentials: OAuthCredentials;
