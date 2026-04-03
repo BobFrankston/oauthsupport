@@ -1,6 +1,6 @@
 {
   "name": "@bobfrankston/oauthsupport",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "Universal OAuth token manager supporting any OAuth provider with automatic token refresh and caching",
   "main": "index.js",
   "types": "index.d.ts",
@@ -20,7 +20,8 @@
     "build": "tsc",
     "prerelease:local": "git add -A && (git diff-index --quiet HEAD || git commit -m \"Pre-release commit\")",
     "preversion": "npm run check && npm run build && git add -A",
-    "release": "npm whoami && npm run prerelease:local && npm version patch && npm publish --access public"
+    "release": "npm whoami && npm run prerelease:local && npm version patch && npm publish --access public",
+    "postversion": "git push && git push --tags"
   },
   "repository": {
     "type": "git",
