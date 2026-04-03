@@ -46,3 +46,4 @@ Thumbs.db
 package-lock.json
 .globalize.json5
 .claude/
+*.tgz
