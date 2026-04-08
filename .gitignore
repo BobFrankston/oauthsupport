@@ -9,6 +9,7 @@
 *.swo
 *.swp
 *.test.js
+*.tgz
 *.token
 *cert*/
 *credentials*.json
