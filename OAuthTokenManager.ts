@@ -279,13 +279,20 @@ export interface OAuthGetTokenOptions {
  * Generic OAuth token acquisition class
  * Handles the OAuth flow for any OAuth provider
  */
+/** Callback for OAuth progress/error messages. Default: errors to console.error, info silent. */
+export type OAuthLogFn = (type: 'info' | 'error', message: string) => void;
+
+const defaultLogFn: OAuthLogFn = (type, msg) => { if (type === 'error') console.error(msg); };
+
 export class OAuthGetToken {
     private credentials: OAuthCredentials;
     private successHtmlPath: string;
     private errorHtmlPath: string;
+    private log: OAuthLogFn;
 
-    constructor(credentials: OAuthCredentials) {
+    constructor(credentials: OAuthCredentials, logFn?: OAuthLogFn) {
         this.credentials = credentials;
+        this.log = logFn || defaultLogFn;
         this.successHtmlPath = path.join(import.meta.dirname, 'oauth-success.html');
         this.errorHtmlPath = path.join(import.meta.dirname, 'oauth-error.html');
     }
@@ -326,15 +333,15 @@ export class OAuthGetToken {
             const urlParts = new URL(redirectUri);
             const port = parseInt(urlParts.port) || 8080;
             
-            console.log(`Starting local OAuth server on ${redirectUri}`);
-            
+            this.log('info', `Starting local OAuth server on ${redirectUri}`);
+
             server.listen(port, () => {
-                console.log(`Started local OAuth server on port ${port}`);
+                this.log('info', `Started local OAuth server on port ${port}`);
                 resolve(server);
             });
             
             server.on('error', (error) => {
-                console.error(`Failed to start local server: ${error.message}`);
+                this.log('error', `Failed to start local server: ${error.message}`);
                 reject(error);
             });
         });
@@ -345,7 +352,7 @@ export class OAuthGetToken {
      */
     private waitForOAuthCallback(server: http.Server, timeoutSeconds: number = 300, signal?: AbortSignal, acceptStdin = false): Promise<string | null> {
         return new Promise((resolve) => {
-            console.log(`Waiting for OAuth callback (timeout: ${timeoutSeconds} seconds)...`);
+            this.log('info', `Waiting for OAuth callback (timeout: ${timeoutSeconds} seconds)...`);
             let resolved = false;
 
             const done = (code: string | null): void => {
@@ -357,14 +364,14 @@ export class OAuthGetToken {
             };
 
             const timeout = setTimeout(() => {
-                console.error('Timeout waiting for OAuth callback');
+                this.log('error', 'Timeout waiting for OAuth callback');
                 done(null);
             }, timeoutSeconds * 1000);
 
             // Handle abort signal
             if (signal) {
                 signal.addEventListener('abort', () => {
-                    console.log('OAuth callback cancelled by user');
+                    this.log('info', 'OAuth callback cancelled by user');
                     done(null);
                 });
             }
@@ -373,7 +380,7 @@ export class OAuthGetToken {
             let rl: readline.Interface | null = null;
             if (acceptStdin && process.stdin.isTTY) {
                 rl = readline.createInterface({ input: process.stdin });
-                console.log('Or paste the authorization code here:');
+                this.log('info', 'Or paste the authorization code here:');
                 rl.on('line', (line: string) => {
                     const input = line.trim();
                     if (!input) return;
@@ -385,7 +392,7 @@ export class OAuthGetToken {
                     } catch {
                         // Not a URL — treat as raw code
                     }
-                    console.log('Authorization code received from stdin');
+                    this.log('info', 'Authorization code received from stdin');
                     done(code);
                 });
             }
@@ -411,7 +418,7 @@ export class OAuthGetToken {
                     });
                 } else if (query.error) {
                     const error = query.error as string;
-                    console.error(`OAuth error: ${error}`);
+                    this.log('error', `OAuth error: ${error}`);
 
                     // Send error response to browser
                     const responseString = fs.readFileSync(this.errorHtmlPath, 'utf8')
@@ -441,7 +448,7 @@ export class OAuthGetToken {
             }
 
             await execAsync(command);
-            console.log('Browser opened for authorization');
+            this.log('info', 'Browser opened for authorization');
             return true;
         } catch (error) {
             return false;
@@ -452,7 +459,7 @@ export class OAuthGetToken {
      * Get an OAuth token through the authorization code flow
      */
     async getToken(options: OAuthGetTokenOptions): Promise<OAuthToken | null> {
-        console.log('Initiating OAuth2 authentication...');
+        this.log('info', 'Initiating OAuth2 authentication...');
         
         const redirectUri = this.credentials.redirect_uris[0];
         let server: http.Server;
@@ -481,33 +488,33 @@ export class OAuthGetToken {
 
             const authUrl = `${this.credentials.auth_uri}?${authParams.toString()}`;
             
-            console.log('Opening browser to authorize the application...');
-            console.log(`Authorization URL: ${authUrl}`);
+            this.log('info', 'Opening browser to authorize the application...');
+            this.log('info', `Authorization URL: ${authUrl}`);
             
             // Try to open browser automatically
             const browserOpened = await this.openBrowser(authUrl);
             if (!browserOpened) {
-                console.log('\nNo browser available. To authorize:');
-                console.log('  1. Open the Authorization URL above in any browser');
-                console.log('  2. Complete the consent flow');
-                console.log('  3. Paste the redirect URL or authorization code below\n');
+                this.log('info', '\nNo browser available. To authorize:');
+                this.log('info', '  1. Open the Authorization URL above in any browser');
+                this.log('info', '  2. Complete the consent flow');
+                this.log('info', '  3. Paste the redirect URL or authorization code below\n');
             }
 
             // Wait for OAuth callback (accept stdin paste when no browser)
             authCode = await this.waitForOAuthCallback(server, options.timeoutSeconds || 300, options.signal, !browserOpened);
             
         } catch (error) {
-            console.error(`Failed to start local OAuth server: ${error}`);
+            this.log('error', `Failed to start local OAuth server: ${error}`);
             return null;
         } finally {
             if (server!) {
                 server.close();
-                console.log('OAuth server stopped');
+                this.log('info', 'OAuth server stopped');
             }
         }
         
         if (!authCode) {
-            console.error('Failed to get authorization code');
+            this.log('error', 'Failed to get authorization code');
             return null;
         }
         
@@ -537,7 +544,7 @@ export class OAuthGetToken {
             const tokenResponse = await response.json() as OAuthToken;
             return tokenResponse;
         } catch (error) {
-            console.error(`Authentication failed: ${error}`);
+            this.log('error', `Authentication failed: ${error}`);
             return null;
         }
     }
@@ -566,13 +573,14 @@ export async function authenticateOAuth(
         loginHint?: string;  /** Pre-select this email in account picker */
         prompt?: 'none' | 'consent' | 'select_account';  /** Force specific prompt; auto-detects 'consent' when refresh token needed */
         signal?: AbortSignal;  /** Allow cancellation of OAuth flow */
+        logFn?: OAuthLogFn;  /** Message callback; default: errors to stderr, info silent */
     }
 ): Promise<OAuthToken | null> {
     // Serialize by tokenDirectory — only one OAuth flow at a time per token location
     const lockKey = options.tokenDirectory || "default";
     const pending = pendingOAuth.get(lockKey);
     if (pending) {
-        console.log(`  [oauth] Waiting for existing auth flow (${lockKey})`);
+        (options.logFn || defaultLogFn)('info', `  [oauth] Waiting for existing auth flow (${lockKey})`);
         return pending;
     }
 
@@ -598,8 +606,10 @@ async function _authenticateOAuth(
         loginHint?: string;
         prompt?: 'none' | 'consent' | 'select_account';
         signal?: AbortSignal;
+        logFn?: OAuthLogFn;
     }
 ): Promise<OAuthToken | null> {
+    const log = options.logFn || defaultLogFn;
     let credentials: OAuthCredentials;
     
     // Handle credentials input - file path, nested object, or direct object
@@ -610,7 +620,7 @@ async function _authenticateOAuth(
             options.credentialsKey
         );
         if (!loadedCredentials) {
-            console.error('Failed to load credentials from file');
+            log('error', 'Failed to load credentials from file');
             return null;
         }
         credentials = loadedCredentials;
@@ -630,7 +640,7 @@ async function _authenticateOAuth(
 
     // Validate credentials
     if (!credentials.client_id || !credentials.client_secret || !credentials.auth_uri || !credentials.token_uri) {
-        console.error('Invalid credentials format - missing required OAuth fields');
+        log('error', 'Invalid credentials format - missing required OAuth fields');
         return null;
     }
 
@@ -649,7 +659,7 @@ async function _authenticateOAuth(
     };
 
     // Create OAuth authenticator
-    const authenticator = new OAuthGetToken(credentials);
+    const authenticator = new OAuthGetToken(credentials, log);
 
     // Check if we need to force consent to get a refresh token
     // This is needed when includeOfflineAccess is requested but stored token lacks refresh_token
@@ -658,12 +668,12 @@ async function _authenticateOAuth(
     const needsRefreshToken = wantOfflineAccess && existingToken && !existingToken.refresh_token;
 
     if (needsRefreshToken) {
-        console.log('Stored token lacks refresh_token - will request consent to obtain one');
+        log('info', 'Stored token lacks refresh_token - will request consent to obtain one');
     }
 
     // Get valid token (will authenticate if needed)
     const token = await tokenManager.getValidToken(oauthClient, async () => {
-        console.log('No valid token found, starting OAuth authentication...');
+        log('info', 'No valid token found, starting OAuth authentication...');
 
         // Determine prompt strategy:
         // - If caller specified a prompt, use it
@@ -675,7 +685,7 @@ async function _authenticateOAuth(
             const storedToken = tokenManager.getStoredToken();
             if (!storedToken || !storedToken.refresh_token) {
                 effectivePrompt = 'consent';
-                console.log('Forcing consent prompt to obtain refresh token for offline access');
+                log('info', 'Forcing consent prompt to obtain refresh token for offline access');
             }
         }
 
@@ -692,7 +702,7 @@ async function _authenticateOAuth(
     });
 
     if (!token) {
-        console.error('❌ Authentication failed');
+        log('error', 'Authentication failed');
     }
 
     return token;
