@@ -335,8 +335,12 @@ export class OAuthGetToken {
             
             this.log('info', `Starting local OAuth server on ${redirectUri}`);
 
-            server.listen(port, () => {
-                this.log('info', `Started local OAuth server on port ${port}`);
+            // Bind explicitly to 127.0.0.1, NOT the default (::) — on Linux the
+            // browser resolves "localhost" to 127.0.0.1 (IPv4) while Node's
+            // default IPv6 socket has IPV6_V6ONLY set, so the GET never reaches
+            // us and the auth page hangs at "Waiting for localhost".
+            server.listen(port, '127.0.0.1', () => {
+                this.log('info', `Started local OAuth server on 127.0.0.1:${port}`);
                 resolve(server);
             });
             
