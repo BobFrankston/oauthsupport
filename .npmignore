@@ -47,3 +47,4 @@ package-lock.json
 .globalize.json5
 .claude/
 *.tgz
+.commitmsg
