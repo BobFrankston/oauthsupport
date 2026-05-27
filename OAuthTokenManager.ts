@@ -151,7 +151,19 @@ export class OAuthTokenManager {
     }
 
     /**
-     * Refresh an expired token using the refresh token
+     * Refresh an expired token using the refresh token.
+     *
+     * Returns:
+     *   - OAuthToken on success
+     *   - null on a HARD failure (4xx from the token endpoint — refresh
+     *     token revoked / invalid / consent withdrawn). Caller should fall
+     *     back to full re-auth.
+     *
+     * Throws on transient network failures (`fetch failed`, DNS, 5xx) so
+     * the caller can retry without nuking the refresh-token credential
+     * and dragging the user through a browser prompt for a network blip.
+     * A single `TypeError: fetch failed` used to cascade into a full
+     * OAuth flow — that was the recurring "I got an auth message" bug.
      */
     async refreshToken(client: OAuthClient, refreshToken: string): Promise<OAuthToken | null> {
         const refreshBody = querystring.stringify({
@@ -161,28 +173,53 @@ export class OAuthTokenManager {
             client_secret: client.clientSecret
         });
 
-        try {
-            const response = await fetch(client.tokenUri, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: refreshBody
-            });
+        // Retry transient network errors (fetch failed, DNS, 5xx) up to 3
+        // attempts with exponential backoff: 1s, 3s, 9s.
+        const MAX_ATTEMPTS = 3;
+        let lastErr: unknown = null;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                const response = await fetch(client.tokenUri, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: refreshBody
+                });
 
-            if (!response.ok) {
+                if (response.ok) {
+                    return await response.json() as OAuthToken;
+                }
+
+                // 4xx — token is genuinely invalid (revoked, etc). Hard
+                // failure; caller falls back to re-auth.
+                if (response.status >= 400 && response.status < 500) {
+                    const errorText = await response.text();
+                    console.error('Token refresh failed (hard):', response.status, response.statusText, errorText);
+                    return null;
+                }
+
+                // 5xx — Google's side, transient. Retry.
                 const errorText = await response.text();
-                console.error('Token refresh failed:', response.status, response.statusText, errorText);
-                return null;
+                lastErr = new Error(`token endpoint ${response.status}: ${errorText}`);
+                console.error(`Token refresh attempt ${attempt}/${MAX_ATTEMPTS} got ${response.status}: ${response.statusText}`);
+            } catch (error) {
+                // Network-level failure — TypeError: fetch failed, ENOTFOUND, etc.
+                lastErr = error;
+                console.error(`Token refresh attempt ${attempt}/${MAX_ATTEMPTS} network error:`, error);
             }
 
-            const tokenResponse = await response.json() as OAuthToken;
-            return tokenResponse;
-
-        } catch (error) {
-            console.error('Error refreshing token:', error);
-            return null;
+            if (attempt < MAX_ATTEMPTS) {
+                const delayMs = 1000 * Math.pow(3, attempt - 1);
+                await new Promise(r => setTimeout(r, delayMs));
+            }
         }
+
+        // All retries exhausted on transient errors — throw so the caller
+        // doesn't mistake this for a hard token-invalid case and trigger
+        // re-auth. Caller decides whether to retry later or surface the
+        // failure to the user without nuking the refresh token.
+        throw lastErr instanceof Error ? lastErr : new Error('Token refresh failed after retries');
     }
 
     /**
@@ -199,7 +236,12 @@ export class OAuthTokenManager {
                 return existingToken;
             }
             
-            // Try to refresh the token if we have a refresh token
+            // Try to refresh the token if we have a refresh token.
+            // refreshToken() distinguishes:
+            //   - hard failure (4xx) → returns null → fall through to re-auth
+            //   - transient failure (network, 5xx) → throws → propagate so
+            //     the caller can retry later. CRUCIAL: do NOT fall through
+            //     to the browser-prompt re-auth path on a network blip.
             if (existingToken.refresh_token) {
                 const refreshedToken = await this.refreshToken(client, existingToken.refresh_token);
                 if (refreshedToken) {
