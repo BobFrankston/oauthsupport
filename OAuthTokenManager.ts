@@ -16,6 +16,17 @@ const execAsync = promisify(exec);
 /** Global serialization for OAuth flows — only one interactive consent at a time across all callers */
 const pendingOAuth = new Map<string, Promise<OAuthToken | null>>();
 
+/** Re-auth backoff per token location. When an interactive OAuth flow fails or
+ *  times out (user didn't complete consent, callback never arrived, refresh
+ *  token revoked on a multi-machine account), DON'T immediately reopen the
+ *  browser on the next sync cycle — that's how a machine ends up with "a
+ *  browser full of authentication requests" (Bob 2026-05-29). Back off for
+ *  REAUTH_BACKOFF_MS; within the window, authenticateOAuth returns null
+ *  without opening a tab so the caller can surface ONE re-auth banner instead
+ *  of spawning a tab every cycle. Cleared on success. */
+const failedOAuthBackoff = new Map<string, number>(); // lockKey → time of last failed flow
+const REAUTH_BACKOFF_MS = 60 * 60 * 1000; // 1 hour
+
 export interface OAuthToken {
     access_token: string;
     refresh_token?: string;
@@ -624,19 +635,47 @@ export async function authenticateOAuth(
 ): Promise<OAuthToken | null> {
     // Serialize by tokenDirectory — only one OAuth flow at a time per token location
     const lockKey = options.tokenDirectory || "default";
+    const log = options.logFn || defaultLogFn;
     const pending = pendingOAuth.get(lockKey);
     if (pending) {
-        (options.logFn || defaultLogFn)('info', `  [oauth] Waiting for existing auth flow (${lockKey})`);
+        log('info', `  [oauth] Waiting for existing auth flow (${lockKey})`);
         return pending;
+    }
+
+    // Re-auth backoff: a recent flow failed/timed out — don't reopen the
+    // browser. Returning null lets the caller show a single "re-authenticate"
+    // banner instead of spawning a consent tab on every sync cycle.
+    const lastFail = failedOAuthBackoff.get(lockKey) || 0;
+    const sinceFail = Date.now() - lastFail;
+    if (sinceFail < REAUTH_BACKOFF_MS) {
+        const mins = Math.ceil((REAUTH_BACKOFF_MS - sinceFail) / 60000);
+        log('info', `  [oauth] Skipping browser — re-auth backoff (${mins}m left for ${lockKey}). Use the re-authenticate banner to retry now.`);
+        return null;
     }
 
     const result = _authenticateOAuth(credentialsPathOrData, options);
     pendingOAuth.set(lockKey, result);
     try {
-        return await result;
+        const token = await result;
+        if (token) {
+            failedOAuthBackoff.delete(lockKey);          // success — clear backoff
+        } else {
+            failedOAuthBackoff.set(lockKey, Date.now()); // failed/timed out — back off
+        }
+        return token;
+    } catch (e) {
+        failedOAuthBackoff.set(lockKey, Date.now());     // threw — back off too
+        throw e;
     } finally {
         pendingOAuth.delete(lockKey);
     }
+}
+
+/** Clear the re-auth backoff for a token location so the next call opens the
+ *  browser immediately. Wired to the "Re-authenticate" banner button — the
+ *  user explicitly asking to re-auth should bypass the backoff. */
+export function clearReauthBackoff(tokenDirectory?: string): void {
+    failedOAuthBackoff.delete(tokenDirectory || "default");
 }
 
 async function _authenticateOAuth(
