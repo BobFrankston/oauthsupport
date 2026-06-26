@@ -10,8 +10,32 @@ import * as http from 'http';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as readline from 'readline';
+import { randomBytes, createHash } from 'node:crypto';
 
 const execAsync = promisify(exec);
+
+/** Base64url-encode a Buffer (RFC 4648 §5): +→-, /→_, strip padding. */
+function base64url(buf: Buffer): string {
+    return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Generate a PKCE (RFC 7636) verifier/challenge pair for a single
+ * authorization-code flow.
+ *
+ * - code_verifier: 32 random bytes → base64url ⇒ 43 chars, all from the
+ *   unreserved set [A-Za-z0-9-._~], satisfying the 43–128 length rule.
+ * - code_challenge: base64url(SHA256(code_verifier)) with method S256.
+ *
+ * The returned pair is per-authorization state — the caller carries it as a
+ * local variable from authorize-URL construction through to the token POST,
+ * so concurrent flows cannot collide.
+ */
+function generatePkce(): { codeVerifier: string; codeChallenge: string } {
+    const codeVerifier = base64url(randomBytes(32));
+    const codeChallenge = base64url(createHash('sha256').update(codeVerifier).digest());
+    return { codeVerifier, codeChallenge };
+}
 
 /** Global serialization for OAuth flows — only one interactive consent at a time across all callers */
 const pendingOAuth = new Map<string, Promise<OAuthToken | null>>();
@@ -42,7 +66,7 @@ export interface StoredOAuthToken extends OAuthToken {
 
 export interface OAuthClient {
     clientId: string;
-    clientSecret: string;
+    clientSecret?: string; // Optional — absent/empty ⇒ public client (PKCE, no secret)
     tokenUri: string;
 }
 
@@ -177,12 +201,18 @@ export class OAuthTokenManager {
      * OAuth flow — that was the recurring "I got an auth message" bug.
      */
     async refreshToken(client: OAuthClient, refreshToken: string): Promise<OAuthToken | null> {
-        const refreshBody = querystring.stringify({
+        // Include client_secret only for confidential clients. Public clients
+        // (no secret) refresh with just client_id — PKCE applies only to the
+        // auth-code exchange, not to refresh.
+        const refreshParams: Record<string, string> = {
             grant_type: 'refresh_token',
             refresh_token: refreshToken,
-            client_id: client.clientId,
-            client_secret: client.clientSecret
-        });
+            client_id: client.clientId
+        };
+        if (client.clientSecret) {
+            refreshParams.client_secret = client.clientSecret;
+        }
+        const refreshBody = querystring.stringify(refreshParams);
 
         // Retry transient network errors (fetch failed, DNS, 5xx) up to 3
         // attempts with exponential backoff: 1s, 3s, 9s.
@@ -313,7 +343,7 @@ export default OAuthTokenManager;
 
 export interface OAuthCredentials {
     client_id: string;
-    client_secret: string;
+    client_secret?: string; // Optional — absent/empty ⇒ public client (PKCE, no secret)
     redirect_uris: string[];
     auth_uri: string;
     token_uri: string;
@@ -366,10 +396,11 @@ export class OAuthGetToken {
             // Support different credential structures (e.g., Google's "installed" key)
             const credentials = credentialsKey ? credentialsJson[credentialsKey] : credentialsJson;
             
-            if (!credentials.client_id || !credentials.client_secret || !credentials.auth_uri || !credentials.token_uri) {
+            // client_secret is optional: absent/empty ⇒ public client (PKCE).
+            if (!credentials.client_id || !credentials.auth_uri || !credentials.token_uri) {
                 throw new Error('Invalid credentials format - missing required fields');
             }
-            
+
             return credentials as OAuthCredentials;
         } catch (error) {
             console.error(`Error loading credentials: ${error}`);
@@ -521,16 +552,24 @@ export class OAuthGetToken {
         const redirectUri = this.credentials.redirect_uris[0];
         let server: http.Server;
         let authCode: string | null = null;
-        
+
+        // PKCE (RFC 7636) state for THIS authorization. Kept as locals so two
+        // concurrent getToken() calls each carry their own verifier — no shared
+        // field to collide on. Sent on both confidential (Google accepts PKCE)
+        // and public (Microsoft requires it) flows.
+        const { codeVerifier, codeChallenge } = generatePkce();
+
         try {
             server = await this.startLocalOAuthServer(redirectUri);
-            
+
             // Create OAuth2 authorization URL
             const authParams = new URLSearchParams({
                 client_id: this.credentials.client_id,
                 redirect_uri: redirectUri,
                 scope: options.scope,
-                response_type: 'code'
+                response_type: 'code',
+                code_challenge: codeChallenge,
+                code_challenge_method: 'S256'
             });
 
             if (options.includeOfflineAccess) {
@@ -575,14 +614,20 @@ export class OAuthGetToken {
             return null;
         }
         
-        // Exchange authorization code for access token
-        const tokenBody = querystring.stringify({
+        // Exchange authorization code for access token. Always send the PKCE
+        // code_verifier for this flow. Include client_secret only when present
+        // (confidential client); omit entirely for public clients.
+        const tokenParams: Record<string, string> = {
             client_id: this.credentials.client_id,
-            client_secret: this.credentials.client_secret,
             code: authCode,
             grant_type: 'authorization_code',
-            redirect_uri: redirectUri
-        });
+            redirect_uri: redirectUri,
+            code_verifier: codeVerifier
+        };
+        if (this.credentials.client_secret) {
+            tokenParams.client_secret = this.credentials.client_secret;
+        }
+        const tokenBody = querystring.stringify(tokenParams);
         
         try {
             const response = await fetch(this.credentials.token_uri, {
@@ -723,8 +768,10 @@ async function _authenticateOAuth(
         credentials = credentialsPathOrData as OAuthCredentials;
     }
 
-    // Validate credentials
-    if (!credentials.client_id || !credentials.client_secret || !credentials.auth_uri || !credentials.token_uri) {
+    // Validate credentials. client_secret is optional: absent/empty ⇒ public
+    // client (authenticated via PKCE, no secret). client_id/auth_uri/token_uri
+    // remain required.
+    if (!credentials.client_id || !credentials.auth_uri || !credentials.token_uri) {
         log('error', 'Invalid credentials format - missing required OAuth fields');
         return null;
     }
@@ -800,8 +847,9 @@ export function parseCredentialsFromString(jsonString: string, credentialsKey?: 
     try {
         const parsed = JSON.parse(jsonString);
         const credentials = credentialsKey ? parsed[credentialsKey] : parsed;
-        
-        if (!credentials.client_id || !credentials.client_secret || !credentials.auth_uri || !credentials.token_uri) {
+
+        // client_secret is optional: absent/empty ⇒ public client (PKCE).
+        if (!credentials.client_id || !credentials.auth_uri || !credentials.token_uri) {
             throw new Error('Invalid credentials format - missing required fields');
         }
         
