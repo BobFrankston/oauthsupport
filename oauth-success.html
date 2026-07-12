@@ -39,11 +39,30 @@
 <body>
     <div class="card">
         <h1>&#10003; Authorization Successful</h1>
-        <p>You can close this tab.</p>
+        <p id="closing">This tab will try to close itself in <span id="count">4</span>s — or just close it.</p>
+        <p style="font-size:0.9em">If another sign-in tab opens right after this one, that's normal —
+        each service (mail, cloud files, contacts) authorizes separately.</p>
+        <p style="font-size:0.9em">Tip: if a consent screen shows permission checkboxes, every requested
+        item must be CHECKED — an unchecked box makes the app repeat this sign-in.</p>
     </div>
     <script>
-        // Try to close — works if tab was opened by JavaScript
-        setTimeout(function () { window.close(); }, 1000);
+        // Countdown then try to close. window.close() only works when the
+        // browser considers the tab script-opened; otherwise the countdown
+        // message flips to a plain "you can close this tab".
+        var n = 4;
+        var t = setInterval(function () {
+            n--;
+            var el = document.getElementById("count");
+            if (el) el.textContent = String(n);
+            if (n <= 0) {
+                clearInterval(t);
+                window.close();
+                setTimeout(function () {
+                    var c = document.getElementById("closing");
+                    if (c) c.textContent = "You can close this tab now.";
+                }, 300);
+            }
+        }, 1000);
     </script>
 </body>
 
