@@ -3,7 +3,7 @@
         "ignoreDeprecations": "6.0",
         "types": ["node"],
         "target": "esnext",
-        "module": "esnext",
+        "module": "NodeNext",
         "declaration": true,
         "declarationMap": true,
         "sourceMap": true,
@@ -22,7 +22,7 @@
         
         /* Module Resolution Options */
         "esModuleInterop": true,
-        "moduleResolution": "node",
+        "moduleResolution": "NodeNext",
         
         /* Advanced Options */
         "skipLibCheck": true,
